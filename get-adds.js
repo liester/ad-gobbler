@@ -76,46 +76,50 @@ async function downloadLogo(auctionHouseId, directory, fileName) {
 
 function buildCsv(advertisements) {
   return new Promise((resolve)=>{
-    fs.writeFileSync(`InDesign.csv`, "ClientName, AuctionTitle, Date, Time, TimeZone, @image1, @image2, @image3, @image4, @image-logo");
+    fs.writeFileSync(`InDesign.csv`, "ClientName, AuctionTitle, City, State, Date, Time, AMPM, TimeZone, @image1, @image2, @image3, @image4, @image-logo");
     advertisements.forEach((advertisement)=>{
-      const startDateInMilliseconds =  Date.parse(advertisement.Opportunity__r.Estimated_Time_Of_Start__c)
-      const startDateMoment =  moment(startDateInMilliseconds)
-      const monthDay = startDateMoment.format("M/D")
-      const hourMinute = startDateMoment.format("HH:MMa")
+      const month= advertisement.auctionStartTime.month;
+      const day = advertisement.auctionStartTime.day
+      const hour = advertisement.auctionStartTime.hour24%12 == 0 ? 12:advertisement.auctionStartTime.hour24%12;
+      const ampm = advertisement.auctionStartTime.hour24 > 12? 'pm':'am';
+      const minute = advertisement.auctionStartTime.minute;
+      const city = advertisement.auctionLocation.city;
+      const state = advertisement.auctionLocation.state;
+      const timezone = advertisement.auctionStartTime.timezone;
       if (!fs.existsSync(advertisement.Id)) {
         fs.mkdirSync(advertisement.Id);
       }
-      fs.appendFileSync(`InDesign.csv`, `\n${advertisement.Account_Name__r.Name}, ${advertisement.Opportunity__r.Auction_Title__c}, ${monthDay}, ${hourMinute}, CT, ./lot1.jpg, ./lot2.jpg, ./lot3.jpg, ./lot4.jpg, ./logo.jpg`);
+      fs.appendFileSync(`InDesign.csv`, `\n${advertisement.Account_Name__r.Name}, ${advertisement.Opportunity__r.Auction_Title__c}, ${city}, ${state}, ${month}/${day}, ${hour}:${minute}, ${ampm}, ${timezone}, ./${advertisement.Id}/lot1.jpg, ./${advertisement.Id}/lot2.jpg, ./${advertisement.Id}/lot3.jpg, ./${advertisement.Id}/lot4.jpg, ./${advertisement.Id}/logo.jpg`);
     })
     console.log("CSV has been generated.")
     return resolve()
   })
 }
 
-
 async function queryAuctionLocationAndStartTime(auctionId){
-  const result = await sql.query`select * from proxibid_reporting.dbo.Auctions where AuctionID = 34`
+  const result = await sql.query`select * from proxibid_reporting.dbo.Auctions 
+  join proxibid_reporting.dbo.TimeZoneLU on Auctions.TimeZoneID = TimeZoneLU.TimeZoneID 
+  join proxibid_reporting.dbo.StateLU on Auctions.StateID = StateLU.StateID where AuctionID = ${auctionId}`
 
-  const auctionDate = result.recordset[0].columns.AuctionDate;
-  const auctionTime = result.recordset[0].columns.AuctionTime;
-  const auctionStreetAddress = result.recordset[0].columns.StreetAddress;
-  const auctionCit = result.recordset[0].columns.StreetAddress;
-
-  
+  const auction = result.recordsets[0][0];
+  const auctionStreetAddress = auction.StreetAddress;
+  const auctionCity = auction.Location;
+  const auctionState = auction.AbbreviationTx;
+  const auctionTimeZone = auction.Abbreviation;
 
   return {
     location: {
-      streetAddress: result.recordset[0].columns.TimeZoneID,
-      city: 'Omaha',
-      state: 'Nebraska'
+      streetAddress: auctionStreetAddress,
+      city: auctionCity,
+      state: auctionState,
     },
     startTime: {
-      day: '11',
-      month: '12',
-      year: '2019',
-      hour24: '13',
-      minute: '00',
-      timezoneId: result.recordset[0].columns.TimeZoneID
+      day: auction.AuctionDate.getUTCDate(),
+      month: auction.AuctionDate.getUTCMonth()+1, //0 index month
+      year: auction.AuctionDate.getUTCFullYear(),
+      hour24: auction.AuctionTime.getUTCHours(),
+      minute: auction.AuctionTime.getUTCMinutes().toString().padStart(2, '0'),
+      timezone: auctionTimeZone
     }
   }
 }
@@ -146,10 +150,11 @@ async function connectToReportingDatabase(){
       // await downloadImage(advertisement.Lot_3_Web_Address__c, advertisement.Id, "lot3.jpg")
       // await downloadImage(advertisement.Lot_4_Web_Address__c, advertisement.Id, "lot4.jpg")
       const auctionLocationAndStartTime = await queryAuctionLocationAndStartTime(advertisement.Auction_ID__c)
-      // advertisement.auctionLocation = auctionLocationAndStartTime.location;
-      // advertisement.startTime = auctionLocationAndStartTime.startTime;
+      advertisement.auctionLocation = auctionLocationAndStartTime.location;
+      advertisement.auctionStartTime = auctionLocationAndStartTime.startTime;
     } catch (error) {
       console.log(error)
+      sql.close();
     }
   }
   await buildCsv(advertisements)
