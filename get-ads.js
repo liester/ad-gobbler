@@ -137,6 +137,29 @@ async function connectToReportingDatabase(){
   await sql.connect(config)
 }
 
+async function downloadFirstLotImage(lotUrl, directory, fileName){
+  console.log(`Downloading first image for lot URL: ${lotUrl}`)
+  return new Promise((resolve, reject)=>{
+    if (!lotUrl) {
+      console.log(`No URL provided for lot.`)
+      return resolve()
+    } 
+    const url = lotUrl;
+    axios.get(url).then((response) => {
+      const re = new RegExp('thumbnail: "(.*)"');  //this is super horrible, please fix at earliest convienence
+      const lotImageUrl = response.data.match(re)[1]
+
+      downloadImage(lotImageUrl, directory, fileName).then(()=>{
+        return resolve()
+      })
+      return;
+    }).catch(error=>{
+      console.log(error)
+      return reject()
+    })
+  })
+}
+
 
 (async function makeItHappen(){
   await connectToReportingDatabase()
@@ -145,10 +168,10 @@ async function connectToReportingDatabase(){
     try {
       console.log(JSON.stringify(advertisement));
       // await downloadLogo(advertisement.Account_Name__r.Auction_House_Id__c,  advertisement.Id,"logo.jpg")
-      // await downloadImage(advertisement.Lot_1_Web_Address__c, advertisement.Id, "lot1.jpg")
-      // await downloadImage(advertisement.Lot_2_Web_Address__c, advertisement.Id, "lot2.jpg")
-      // await downloadImage(advertisement.Lot_3_Web_Address__c, advertisement.Id, "lot3.jpg")
-      // await downloadImage(advertisement.Lot_4_Web_Address__c, advertisement.Id, "lot4.jpg")
+      await downloadFirstLotImage(advertisement.Lot_1_Web_Address__c, advertisement.Id, "lot1.jpg")
+      await downloadFirstLotImage(advertisement.Lot_2_Web_Address__c, advertisement.Id, "lot2.jpg")
+      await downloadImage(advertisement.Lot_2_Web_Address__c, advertisement.Id, "lot3.jpg")
+      await downloadImage(advertisement.Lot_4_Web_Address__c, advertisement.Id, "lot4.jpg")
       const auctionLocationAndStartTime = await queryAuctionLocationAndStartTime(advertisement.Auction_ID__c)
       advertisement.auctionLocation = auctionLocationAndStartTime.location;
       advertisement.auctionStartTime = auctionLocationAndStartTime.startTime;
