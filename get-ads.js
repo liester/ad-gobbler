@@ -1,17 +1,19 @@
 var jsforce = require('jsforce');
 const http = require('https');
 const fs = require('fs');
-const moment = require('moment')
 const cheerio = require('cheerio')
 const axios = require('axios')
 const dotenv = require('dotenv')
 const sql = require('mssql')
 dotenv.config();
 
-const query = `SELECT Id, Account_Manager__c,Auction_ID__c, Account_Name__c, Account_Name__r.Name, Account_Name__r.Auction_House_Id__c,Opportunity__r.Auction_Title__c, Opportunity__r.Estimated_Time_Of_Start__c,
+const query = `SELECT Id, Advertising_Type__c, Type__c, Advertisement_Created__c, Account_Manager__c,Auction_ID__c, Account_Name__c, Account_Name__r.Name, Account_Name__r.Auction_House_Id__c,Opportunity__r.Auction_Title__c, Opportunity__r.Estimated_Time_Of_Start__c,
 Lot_1__c, Lot_2__c,Lot_3__c,Lot_4__c,Lot_1_Web_Address__c, Lot_2_Web_Address__c, Lot_3_Web_Address__c, Lot_4_Web_Address__c, Start_Date__c 
 FROM Advertising__c
-limit 1`;
+where Advertising_Type__c != 'Homepage' 
+  and Type__c = 'Slider - 740x320 pixels'
+  and Advertisement_Created__c = False
+  and (Start_Date__c = NEXT_N_DAYS:6 OR Start_Date__c <= TODAY)`;
 
 function querySalesforce(query){
   var conn = new jsforce.Connection({
@@ -60,39 +62,47 @@ async function downloadLogo(auctionHouseId, directory, fileName) {
       return resolve()
     } 
     const url = `https://www.proxibid.com/asp/AuctionsByCompany.asp?ahid=${auctionHouseId}`
+    console.log(`${auctionHouseId}: ${url}`)
     axios.get(url).then((response) => {
       const $ = cheerio.load(response.data)
       const auctionImageUrl = $('.aucCompanyImage')[0].attribs.src;
       downloadImage(auctionImageUrl, directory, fileName).then(()=>{
         return resolve()
       })
-    }).catch(error=>{
+    }).catch(error=>{ 
       console.log(error)
-      return reject()
+      return reject(`Error downloading logo for auction house id: ${auctionHouseId}: ${error}`)
     })
   })
 }
 
 
 function buildCsv(advertisements) {
-  return new Promise((resolve)=>{
-    fs.writeFileSync(`InDesign.csv`, "ClientName, AuctionTitle, City, State, Date, Time, AMPM, TimeZone, @image1, @image2, @image3, @image4, @image-logo");
-    advertisements.forEach((advertisement)=>{
-      const month= advertisement.auctionStartTime.month;
-      const day = advertisement.auctionStartTime.day
-      const hour = advertisement.auctionStartTime.hour24%12 == 0 ? 12:advertisement.auctionStartTime.hour24%12;
-      const ampm = advertisement.auctionStartTime.hour24 > 12? 'pm':'am';
-      const minute = advertisement.auctionStartTime.minute;
-      const city = advertisement.auctionLocation.city;
-      const state = advertisement.auctionLocation.state;
-      const timezone = advertisement.auctionStartTime.timezone;
-      if (!fs.existsSync(advertisement.Id)) {
-        fs.mkdirSync(advertisement.Id);
+  return new Promise((resolve, reject)=>{
+    try{
+      if(!advertisements.length){
+        return resolve();
       }
-      fs.appendFileSync(`InDesign.csv`, `\n${advertisement.Account_Name__r.Name}, ${advertisement.Opportunity__r.Auction_Title__c}, ${city}, ${state}, ${month}/${day}, ${hour}:${minute}, ${ampm}, ${timezone}, ./${advertisement.Id}/lot1.jpg, ./${advertisement.Id}/lot2.jpg, ./${advertisement.Id}/lot3.jpg, ./${advertisement.Id}/lot4.jpg, ./${advertisement.Id}/logo.jpg`);
-    })
-    console.log("CSV has been generated.")
-    return resolve()
+      fs.writeFileSync(`InDesign.csv`, "ClientName, AuctionTitle, City, State, Date, Time, AMPM, TimeZone, @image1, @image2, @image3, @image4, @image-logo");
+      advertisements.forEach((advertisement)=>{
+        const month= advertisement.auctionStartTime.month;
+        const day = advertisement.auctionStartTime.day
+        const hour = advertisement.auctionStartTime.hour24%12 == 0 ? 12:advertisement.auctionStartTime.hour24%12;
+        const ampm = advertisement.auctionStartTime.hour24 > 12? 'pm':'am';
+        const minute = advertisement.auctionStartTime.minute;
+        const city = advertisement.auctionLocation.city;
+        const state = advertisement.auctionLocation.state;
+        const timezone = advertisement.auctionStartTime.timezone;
+        if (!fs.existsSync(advertisement.Id)) {
+          fs.mkdirSync(advertisement.Id);
+        }
+        fs.appendFileSync(`InDesign.csv`, `\n${advertisement.Account_Name__r.Name}, ${advertisement.Opportunity__r.Auction_Title__c}, ${city}, ${state}, ${month}/${day}, ${hour}:${minute}, ${ampm}, ${timezone}, ./${advertisement.Id}/lot1.jpg, ./${advertisement.Id}/lot2.jpg, ./${advertisement.Id}/lot3.jpg, ./${advertisement.Id}/lot4.jpg, ./${advertisement.Id}/logo.jpg`);
+      })
+      return resolve(`Successfully build CSV`)
+    }catch(error){
+      console.log(error);
+      return reject(`Error building CSV: ${error}`);
+    }
   })
 }
 
@@ -147,12 +157,15 @@ async function downloadFirstLotImage(lotUrl, directory, fileName){
     const url = lotUrl;
     axios.get(url).then((response) => {
       const re = new RegExp('thumbnail: "(.*)"');  //this is super horrible, please fix at earliest convienence
-      const lotImageUrl = response.data.match(re)[1]
-
-      downloadImage(lotImageUrl, directory, fileName).then(()=>{
+      const matches = response.data.match(re)
+      if(matches){
+        const lotImageUrl = matches[1]
+        downloadImage(lotImageUrl, directory, fileName).then(()=>{
+          return resolve()
+        })
+      }else{
         return resolve()
-      })
-      return;
+      }
     }).catch(error=>{
       console.log(error)
       return reject()
@@ -164,23 +177,28 @@ async function downloadFirstLotImage(lotUrl, directory, fileName){
 (async function makeItHappen(){
   await connectToReportingDatabase()
   const advertisements = await querySalesforce(query);
+  let succesfulAdvertisements = [];
+  let failedAdvertisements = [];
   for( const advertisement of advertisements){
     try {
       console.log(JSON.stringify(advertisement));
-      // await downloadLogo(advertisement.Account_Name__r.Auction_House_Id__c,  advertisement.Id,"logo.jpg")
+      await downloadLogo(advertisement.Account_Name__r.Auction_House_Id__c,  advertisement.Id,"logo.jpg")
       await downloadFirstLotImage(advertisement.Lot_1_Web_Address__c, advertisement.Id, "lot1.jpg")
       await downloadFirstLotImage(advertisement.Lot_2_Web_Address__c, advertisement.Id, "lot2.jpg")
-      await downloadImage(advertisement.Lot_2_Web_Address__c, advertisement.Id, "lot3.jpg")
-      await downloadImage(advertisement.Lot_4_Web_Address__c, advertisement.Id, "lot4.jpg")
+      await downloadFirstLotImage(advertisement.Lot_2_Web_Address__c, advertisement.Id, "lot3.jpg")
+      await downloadFirstLotImage(advertisement.Lot_4_Web_Address__c, advertisement.Id, "lot4.jpg")
       const auctionLocationAndStartTime = await queryAuctionLocationAndStartTime(advertisement.Auction_ID__c)
       advertisement.auctionLocation = auctionLocationAndStartTime.location;
       advertisement.auctionStartTime = auctionLocationAndStartTime.startTime;
+      succesfulAdvertisements.push(advertisement);
     } catch (error) {
       console.log(error)
-      sql.close();
+      failedAdvertisements.push(`${advertisement.Id}: ${error}`);
     }
   }
-  await buildCsv(advertisements)
+  const buildCsvResult = await buildCsv(succesfulAdvertisements)
+  console.log(buildCsvResult)
   sql.close()
   console.log(`All dones`)
+  console.log(`Failed Advertisements: ${JSON.stringify(failedAdvertisements)}`)
 })();
