@@ -42,14 +42,14 @@ function downloadImage(url, directory, fileName) {
       console.log(`No URL provided for ${fileName}`)
       return resolve()
     } 
-    console.log(`Downloading image url: ${url}`)
+    console.log(`Downloading image url for: ${fileName} - URL: ${url}`)
     http.get(url, function (response) {
       if(!fs.existsSync(directory)){
         fs.mkdirSync(directory)
       }
       const file = fs.createWriteStream(`${directory}/${fileName}`);
       response.pipe(file);
-      return resolve(`File ${fileName} saved`)
+      return resolve()
     });
   })
 }
@@ -62,7 +62,6 @@ async function downloadLogo(auctionHouseId, directory, fileName) {
       return resolve()
     } 
     const url = `https://www.proxibid.com/asp/AuctionsByCompany.asp?ahid=${auctionHouseId}`
-    console.log(`${auctionHouseId}: ${url}`)
     axios.get(url).then((response) => {
       const $ = cheerio.load(response.data)
       const auctionImageUrl = $('.aucCompanyImage')[0].attribs.src;
@@ -164,6 +163,7 @@ async function downloadFirstLotImage(lotUrl, directory, fileName){
           return resolve()
         })
       }else{
+        console.log(`No image found for: ${fileName} - URL: ${lotUrl}`)
         return resolve()
       }
     }).catch(error=>{
@@ -173,6 +173,11 @@ async function downloadFirstLotImage(lotUrl, directory, fileName){
   })
 }
 
+function isJpegURL(url){
+  const regex = /\.jpg|\.jpeg$/gm;
+  const matches =  regex.exec(url);
+  return !!matches;
+}
 
 (async function makeItHappen(){
   await connectToReportingDatabase()
@@ -183,10 +188,31 @@ async function downloadFirstLotImage(lotUrl, directory, fileName){
     try {
       console.log(JSON.stringify(advertisement));
       await downloadLogo(advertisement.Account_Name__r.Auction_House_Id__c,  advertisement.Id,"logo.jpg")
-      await downloadFirstLotImage(advertisement.Lot_1_Web_Address__c, advertisement.Id, "lot1.jpg")
-      await downloadFirstLotImage(advertisement.Lot_2_Web_Address__c, advertisement.Id, "lot2.jpg")
-      await downloadFirstLotImage(advertisement.Lot_2_Web_Address__c, advertisement.Id, "lot3.jpg")
-      await downloadFirstLotImage(advertisement.Lot_4_Web_Address__c, advertisement.Id, "lot4.jpg")
+
+      if(isJpegURL(advertisement.Lot_1_Web_Address__c)){
+        await downloadImage(advertisement.Lot_1_Web_Address__c, advertisement.Id, "lot1.jpg");
+      }else {
+        await downloadFirstLotImage(advertisement.Lot_1_Web_Address__c, advertisement.Id, "lot1.jpg")
+      }
+
+      if(isJpegURL(advertisement.Lot_2_Web_Address__c)){
+        await downloadImage(advertisement.Lot_2_Web_Address__c, advertisement.Id, "lot2.jpg");
+      }else {
+        await downloadFirstLotImage(advertisement.Lot_2_Web_Address__c, advertisement.Id, "lot2.jpg")
+      }
+
+      if(isJpegURL(advertisement.Lot_3_Web_Address__c)){
+        await downloadImage(advertisement.Lot_3_Web_Address__c, advertisement.Id, "lot3.jpg");
+      }else{
+        await downloadFirstLotImage(advertisement.Lot_3_Web_Address__c, advertisement.Id, "lot3.jpg")
+      }
+
+      if(isJpegURL(advertisement.Lot_4_Web_Address__c)){
+        await downloadImage(advertisement.Lot_3_Web_Address__c, advertisement.Id, "lot3.jpg");
+      }else{
+        await downloadFirstLotImage(advertisement.Lot_4_Web_Address__c, advertisement.Id, "lot4.jpg")
+      }
+
       const auctionLocationAndStartTime = await queryAuctionLocationAndStartTime(advertisement.Auction_ID__c)
       advertisement.auctionLocation = auctionLocationAndStartTime.location;
       advertisement.auctionStartTime = auctionLocationAndStartTime.startTime;
