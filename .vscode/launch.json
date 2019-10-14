@@ -9,8 +9,7 @@
             "type": "node",
             "request": "launch",
             "name": "Launch Program",
-            "program": "${workspaceFolder}\\get-ads.js",
-            "args": ["a0F50000006OO7dEAG"]
+            "program": "${workspaceFolder}\\ad-gobbler.js"
         }
     ]
 }
