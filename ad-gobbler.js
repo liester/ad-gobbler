@@ -57,28 +57,6 @@ function downloadImage(url, directory, fileName) {
   })
 }
 
-async function downloadLogo(auctionHouseId, directory, fileName) {
-  console.log(`Downloading logo for auction house id: ${auctionHouseId}`)
-  return new Promise((resolve, reject)=>{
-    if (!auctionHouseId) {
-      console.log(`No URL provided for ${fileName}`)
-      return resolve()
-    } 
-    const url = `https://www.proxibid.com/asp/AuctionsByCompany.asp?ahid=${auctionHouseId}`
-    axios.get(url).then((response) => {
-      const $ = cheerio.load(response.data)
-      const auctionImageUrl = $('.aucCompanyImage')[0].attribs.src;
-      downloadImage(auctionImageUrl, directory, fileName).then(()=>{
-        return resolve()
-      })
-    }).catch(error=>{ 
-      console.log(error)
-      return reject(`Error downloading logo for auction house id: ${auctionHouseId}: ${error}`)
-    })
-  })
-}
-
-
 async function buildCsv(advertisements) {
   const csvWriter = createCsvWriter({
     path: 'InDesign.csv',
@@ -182,9 +160,11 @@ async function buildCsv(advertisements) {
 }
 
 async function queryAuctionInformation(auctionId){
-  const result = await sql.query`select * from proxibid_reporting.dbo.Auctions 
-  join proxibid_reporting.dbo.TimeZoneLU on Auctions.TimeZoneID = TimeZoneLU.TimeZoneID 
-  join proxibid_reporting.dbo.StateLU on Auctions.StateID = StateLU.StateID where AuctionID = ${auctionId}`
+  const result = await sql.query`select *, AuctionHouses.LogoFileName as 'AuctionHouseLogo' from proxibid_reporting.dbo.Auctions
+  join proxibid_reporting.dbo.TimeZoneLU on Auctions.TimeZoneID = TimeZoneLU.TimeZoneID
+  join proxibid_reporting.dbo.StateLU on Auctions.StateID = StateLU.StateID
+  join proxibid_reporting.dbo.AuctionHouses on Auctions.AuctionHouseID = AuctionHouses.AuctionHouseID
+  where AuctionID = ${auctionId}`
 
   const auction = result.recordsets[0][0];
   const auctionStreetAddress = auction.StreetAddress;
@@ -212,6 +192,7 @@ async function queryAuctionInformation(auctionId){
     timezone: auctionTimeZone
   }
   auctionInformation.isTimed = isTimed;
+  auctionInformation.auctionHouseLogoFileName = auction.AuctionHouseLogo;
   if(isTimed){
     auctionInformation.endTime = {
       dayOfMonth: auction.EndDateTime.getUTCDate(),
@@ -231,7 +212,6 @@ async function queryAuctionInformation(auctionId){
 async function connectToReportingDatabase(){
   const database_user = process.env.reporting_database_user;
   const database_password = process.env.reporting_database_password;
-  // await sql.connect(`jdbc:sqlserver://rptdb;databaseName=proxibid_reporting;user=${database_user};password=${database_password}`);
   const config = {
     user: database_user,
     password: database_password,
@@ -285,7 +265,14 @@ function isJpegURL(url){
     const directory = `${advertisementBaseDirectory}/${advertisement.cleanedAuctionHouseName}-${advertisement.Id}`;
     try {
       console.log(JSON.stringify(advertisement));
-      await downloadLogo(advertisement.Account_Name__r.Auction_House_Id__c,  directory,"logo.jpg")
+      const auctionInformation = await queryAuctionInformation(advertisement.Auction_ID__c)
+      advertisement.auctionLocation = auctionInformation.location;
+      advertisement.auctionStartTime = auctionInformation.startTime;
+      advertisement.auctionEndTime = auctionInformation.endTime;
+      advertisement.isTimed = auctionInformation.isTimed;
+      const logoUrl = `https://images.proxibid.com/auctionimages/${advertisement.Account_Name__r.Auction_House_Id__c}/${auctionInformation.auctionHouseLogoFileName}`;
+
+      await downloadImage(logoUrl, directory,"logo.jpg")
 
       if(isJpegURL(advertisement.Lot_1_Web_Address__c)){
         await downloadImage(advertisement.Lot_1_Web_Address__c, directory, "lot1.jpg");
@@ -311,11 +298,6 @@ function isJpegURL(url){
         await downloadFirstLotImage(advertisement.Lot_4_Web_Address__c, directory, "lot4.jpg")
       }
 
-      const auctionInformation = await queryAuctionInformation(advertisement.Auction_ID__c)
-      advertisement.auctionLocation = auctionInformation.location;
-      advertisement.auctionStartTime = auctionInformation.startTime;
-      advertisement.auctionEndTime = auctionInformation.endTime;
-      advertisement.isTimed = auctionInformation.isTimed;
       succesfulAdvertisements.push(advertisement);
     } catch (error) {
       console.log(error)
