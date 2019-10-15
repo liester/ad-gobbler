@@ -36,7 +36,6 @@ dotenv.config();
   }
   const buildCsvResult = await buildCsv(succesfulAdvertisements, advertisementBaseDirectory)
   console.log(buildCsvResult)
-  // sql.close()
   console.log(`All dones`)
   console.log(`Failed Advertisements: ${JSON.stringify(failedAdvertisements)}`)
 })();

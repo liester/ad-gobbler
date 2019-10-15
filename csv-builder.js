@@ -77,7 +77,7 @@ async function buildCsv(advertisements, advertisementBaseDirectory) {
               AuctionTitle: advertisement.Opportunity__r.Auction_Title__c,
               City: city,
               State: state,
-              Ends: advertisement.isTimed?"Ends":"",
+              Ends: advertisement.isTimed?"Ends ":"",
               Month: month,
               MonthAbbreviation: monthAbbreviation,
               DayOfMonth: dayOfMonth,
