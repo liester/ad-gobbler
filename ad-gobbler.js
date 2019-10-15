@@ -307,7 +307,7 @@ function isJpegURL(url){
       succesfulAdvertisements.push(advertisement);
     } catch (error) {
       console.log(error)
-      failedAdvertisements.push(`${salesforce_advertisement_base_url}/${advertisement.Id}: ${error}`);
+      failedAdvertisements.push(`${process.env.salesforce_advertisement_base_url}/${advertisement.Id}: ${error}`);
     }
   }
   const buildCsvResult = await buildCsv(succesfulAdvertisements)
