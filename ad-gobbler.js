@@ -82,10 +82,12 @@ async function buildCsv(advertisements) {
   const csvWriter = createCsvWriter({
     path: 'InDesign.csv',
     header: [
+      {id: 'marketingToUse', title: 'marketingToUse' },
       {id: 'name', title: 'ClientName'},
       {id: 'AuctionTitle', title: 'AuctionTitle'},
       {id: 'City', title: 'City'},
       {id: 'State', title: 'State'},
+      {id: 'Ends', title: 'Ends'},
       {id: 'Month', title: 'Month'},
       {id: 'DayOfMonth', title: 'DayOfMonth'},
       {id: 'DayOfWeek', title: 'DayOfWeek'},
@@ -96,7 +98,7 @@ async function buildCsv(advertisements) {
       {id: 'image2', title: '@image2'},
       {id: 'image3', title: '@image3'},
       {id: 'image4', title: '@image4'},
-      {id: 'logo', title: '@image-logo'}
+      {id: 'logo', title: '@image-logo'},
     ]
   });
   let records = [];
@@ -120,10 +122,13 @@ async function buildCsv(advertisements) {
           fs.mkdirSync(advertisement.Id);
         }
         records.push(
-          {name: advertisement.Account_Name__r.Name,
+          {
+            marketingToUse: advertisement.Marketing_to_use__c,
+            name: advertisement.Account_Name__r.Name,
             AuctionTitle: advertisement.Opportunity__r.Auction_Title__c,
             City: city,
             State: state,
+            Ends: advertisement.isTimed?"Ends":"",
             Month: month,
             DayOfMonth: dayOfMonth,
             DayOfWeek:dayOfWeek,
@@ -160,7 +165,7 @@ function dayOfWeekSuffix(day){
   return "th";
 }
 
-async function queryAuctionLocationAndStartTime(auctionId){
+async function queryAuctionInformation(auctionId){
   const result = await sql.query`select * from proxibid_reporting.dbo.Auctions 
   join proxibid_reporting.dbo.TimeZoneLU on Auctions.TimeZoneID = TimeZoneLU.TimeZoneID 
   join proxibid_reporting.dbo.StateLU on Auctions.StateID = StateLU.StateID where AuctionID = ${auctionId}`
@@ -170,6 +175,7 @@ async function queryAuctionLocationAndStartTime(auctionId){
   const auctionCity = auction.Location;
   const auctionState = auction.AbbreviationTx;
   const auctionTimeZone = auction.Abbreviation;
+  const isTimed = auction.AuctionTypeId == 2;
 
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const dayOfMonth = `${auction.AuctionDate.getUTCDate()}${dayOfWeekSuffix(auction.AuctionDate.getUTCDate())}`;
@@ -187,7 +193,8 @@ async function queryAuctionLocationAndStartTime(auctionId){
       hour24: auction.AuctionTime.getUTCHours(),
       minute: auction.AuctionTime.getUTCMinutes().toString().padStart(2, '0'),
       timezone: auctionTimeZone
-    }
+    },
+    isTimed: isTimed
   }
 }
 
@@ -271,9 +278,10 @@ function isJpegURL(url){
         await downloadFirstLotImage(advertisement.Lot_4_Web_Address__c, advertisement.Id, "lot4.jpg")
       }
 
-      const auctionLocationAndStartTime = await queryAuctionLocationAndStartTime(advertisement.Auction_ID__c)
-      advertisement.auctionLocation = auctionLocationAndStartTime.location;
-      advertisement.auctionStartTime = auctionLocationAndStartTime.startTime;
+      const auctionInformation = await queryAuctionInformation(advertisement.Auction_ID__c)
+      advertisement.auctionLocation = auctionInformation.location;
+      advertisement.auctionStartTime = auctionInformation.startTime;
+      advertisement.isTimed = auctionInformation.isTimed;
       succesfulAdvertisements.push(advertisement);
     } catch (error) {
       console.log(error)
