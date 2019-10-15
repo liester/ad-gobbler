@@ -109,6 +109,7 @@ async function buildCsv(advertisements) {
       }
       fs.writeFileSync(`InDesign.csv`, "ClientName, AuctionTitle, City, State, Month, DayOfMonth, DayOfWeek, Time, AMPM, TimeZone, @image1, @image2, @image3, @image4, @image-logo");
       advertisements.forEach((advertisement)=>{
+        const directory = `${advertisement.cleanedAuctionHouseName}-${advertisement.Id}`;
         const month= advertisement.auctionStartTime.month;
         const dayOfWeek = advertisement.auctionStartTime.dayOfWeek;
         const dayOfMonth = advertisement.auctionStartTime.dayOfMonth;
@@ -118,8 +119,8 @@ async function buildCsv(advertisements) {
         const city = advertisement.auctionLocation.city;
         const state = advertisement.auctionLocation.state;
         const timezone = advertisement.auctionStartTime.timezone;
-        if (!fs.existsSync(advertisement.Id)) {
-          fs.mkdirSync(advertisement.Id);
+        if (!fs.existsSync(directory)) {
+          fs.mkdirSync(directory);
         }
         records.push(
           {
@@ -135,15 +136,13 @@ async function buildCsv(advertisements) {
             Time: `${hour}:${minute}`,
             AMPM: ampm,
             TimeZone: timezone,
-            image1: `./${advertisement.Id}/lot1.jpg`,
-            image2: `./${advertisement.Id}/lot2.jpg`,
-            image3: `./${advertisement.Id}/lot3.jpg`,
-            image4: `./${advertisement.Id}/lot4.jpg`,
-            logo: `./${advertisement.Id}/logo.jpg`,
+            image1: `./${directory}/lot1.jpg`,
+            image2: `./${directory}/lot2.jpg`,
+            image3: `./${directory}/lot3.jpg`,
+            image4: `./${directory}/lot4.jpg`,
+            logo: `./${directory}/logo.jpg`,
           }
         )
-        // fs.appendFileSync(`InDesign.csv`, `\n"${advertisement.Account_Name__r.Name}", "${advertisement.Opportunity__r.Auction_Title__c}", "${city}", "${state}", "${month}", "${dayOfMonth}", "${dayOfWeek}", "${hour}:${minute}", "${ampm}", "${timezone}", ./${advertisement.Id}/lot1.jpg, ./${advertisement.Id}/lot2.jpg, ./${advertisement.Id}/lot3.jpg, ./${advertisement.Id}/lot4.jpg, ./${advertisement.Id}/logo.jpg`);
-
       })
       csvWriter.writeRecords(records).then(()=>{
         console.log('...Done');
@@ -250,32 +249,35 @@ function isJpegURL(url){
   let succesfulAdvertisements = [];
   let failedAdvertisements = [];
   for( const advertisement of advertisements){
+    const cleanedAuctionHouseName = advertisement.Account_Name__r.Name.replace(/'|,|"|\./g, '').replace(/\s|\//g, '-')
+    advertisement.cleanedAuctionHouseName = cleanedAuctionHouseName;
+    const directory = `${advertisement.cleanedAuctionHouseName}-${advertisement.Id}`;
     try {
       console.log(JSON.stringify(advertisement));
-      await downloadLogo(advertisement.Account_Name__r.Auction_House_Id__c,  advertisement.Id,"logo.jpg")
+      await downloadLogo(advertisement.Account_Name__r.Auction_House_Id__c,  directory,"logo.jpg")
 
       if(isJpegURL(advertisement.Lot_1_Web_Address__c)){
-        await downloadImage(advertisement.Lot_1_Web_Address__c, advertisement.Id, "lot1.jpg");
+        await downloadImage(advertisement.Lot_1_Web_Address__c, directory, "lot1.jpg");
       }else {
-        await downloadFirstLotImage(advertisement.Lot_1_Web_Address__c, advertisement.Id, "lot1.jpg")
+        await downloadFirstLotImage(advertisement.Lot_1_Web_Address__c, directory, "lot1.jpg")
       }
 
       if(isJpegURL(advertisement.Lot_2_Web_Address__c)){
-        await downloadImage(advertisement.Lot_2_Web_Address__c, advertisement.Id, "lot2.jpg");
+        await downloadImage(advertisement.Lot_2_Web_Address__c, directory, "lot2.jpg");
       }else {
-        await downloadFirstLotImage(advertisement.Lot_2_Web_Address__c, advertisement.Id, "lot2.jpg")
+        await downloadFirstLotImage(advertisement.Lot_2_Web_Address__c, directory, "lot2.jpg")
       }
 
       if(isJpegURL(advertisement.Lot_3_Web_Address__c)){
-        await downloadImage(advertisement.Lot_3_Web_Address__c, advertisement.Id, "lot3.jpg");
+        await downloadImage(advertisement.Lot_3_Web_Address__c, directory, "lot3.jpg");
       }else{
-        await downloadFirstLotImage(advertisement.Lot_3_Web_Address__c, advertisement.Id, "lot3.jpg")
+        await downloadFirstLotImage(advertisement.Lot_3_Web_Address__c, directory, "lot3.jpg")
       }
 
       if(isJpegURL(advertisement.Lot_4_Web_Address__c)){
-        await downloadImage(advertisement.Lot_3_Web_Address__c, advertisement.Id, "lot3.jpg");
+        await downloadImage(advertisement.Lot_3_Web_Address__c, directory, "lot3.jpg");
       }else{
-        await downloadFirstLotImage(advertisement.Lot_4_Web_Address__c, advertisement.Id, "lot4.jpg")
+        await downloadFirstLotImage(advertisement.Lot_4_Web_Address__c, directory, "lot4.jpg")
       }
 
       const auctionInformation = await queryAuctionInformation(advertisement.Auction_ID__c)
