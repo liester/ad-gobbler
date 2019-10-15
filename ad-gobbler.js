@@ -5,9 +5,11 @@ const cheerio = require('cheerio')
 const axios = require('axios')
 const dotenv = require('dotenv')
 const sql = require('mssql')
+const createCsvWriter = require('csv-writer').createObjectCsvWriter;
+
 dotenv.config();
 
-const query = `SELECT Id, Advertising_Type__c, Type__c, Advertisement_Created__c, Account_Manager__c,Auction_ID__c, Account_Name__c, Account_Name__r.Name, Account_Name__r.Auction_House_Id__c,Opportunity__r.Auction_Title__c, Opportunity__r.Estimated_Time_Of_Start__c,
+const query = `SELECT Id, Advertising_Type__c, Type__c, Advertisement_Created__c,Marketing_to_use__c, Account_Manager__c,Auction_ID__c, Account_Name__c, Account_Name__r.Name, Account_Name__r.Auction_House_Id__c,Opportunity__r.Auction_Title__c, Opportunity__r.Estimated_Time_Of_Start__c,
 Lot_1__c, Lot_2__c,Lot_3__c,Lot_4__c,Lot_1_Web_Address__c, Lot_2_Web_Address__c, Lot_3_Web_Address__c, Lot_4_Web_Address__c, Start_Date__c 
 FROM Advertising__c
 where Advertising_Type__c != 'Homepage' 
@@ -76,16 +78,38 @@ async function downloadLogo(auctionHouseId, directory, fileName) {
 }
 
 
-function buildCsv(advertisements) {
+async function buildCsv(advertisements) {
+  const csvWriter = createCsvWriter({
+    path: 'InDesign.csv',
+    header: [
+      {id: 'name', title: 'ClientName'},
+      {id: 'AuctionTitle', title: 'AuctionTitle'},
+      {id: 'City', title: 'City'},
+      {id: 'State', title: 'State'},
+      {id: 'Month', title: 'Month'},
+      {id: 'DayOfMonth', title: 'DayOfMonth'},
+      {id: 'DayOfWeek', title: 'DayOfWeek'},
+      {id: 'Time', title: 'Time'},
+      {id: 'AMPM', title: 'AMPM'},
+      {id: 'TimeZone', title: 'TimeZone'},
+      {id: 'image1', title: '@image1'},
+      {id: 'image2', title: '@image2'},
+      {id: 'image3', title: '@image3'},
+      {id: 'image4', title: '@image4'},
+      {id: 'logo', title: '@image-logo'}
+    ]
+  });
+  let records = [];
   return new Promise((resolve, reject)=>{
     try{
       if(!advertisements.length){
         return resolve();
       }
-      fs.writeFileSync(`InDesign.csv`, "ClientName, AuctionTitle, City, State, Date, Time, AMPM, TimeZone, @image1, @image2, @image3, @image4, @image-logo");
+      fs.writeFileSync(`InDesign.csv`, "ClientName, AuctionTitle, City, State, Month, DayOfMonth, DayOfWeek, Time, AMPM, TimeZone, @image1, @image2, @image3, @image4, @image-logo");
       advertisements.forEach((advertisement)=>{
         const month= advertisement.auctionStartTime.month;
-        const day = advertisement.auctionStartTime.day
+        const dayOfWeek = advertisement.auctionStartTime.dayOfWeek;
+        const dayOfMonth = advertisement.auctionStartTime.dayOfMonth;
         const hour = advertisement.auctionStartTime.hour24%12 == 0 ? 12:advertisement.auctionStartTime.hour24%12;
         const ampm = advertisement.auctionStartTime.hour24 > 12? 'pm':'am';
         const minute = advertisement.auctionStartTime.minute;
@@ -95,14 +119,45 @@ function buildCsv(advertisements) {
         if (!fs.existsSync(advertisement.Id)) {
           fs.mkdirSync(advertisement.Id);
         }
-        fs.appendFileSync(`InDesign.csv`, `\n${advertisement.Account_Name__r.Name}, ${advertisement.Opportunity__r.Auction_Title__c}, ${city}, ${state}, ${month}/${day}, ${hour}:${minute}, ${ampm}, ${timezone}, ./${advertisement.Id}/lot1.jpg, ./${advertisement.Id}/lot2.jpg, ./${advertisement.Id}/lot3.jpg, ./${advertisement.Id}/lot4.jpg, ./${advertisement.Id}/logo.jpg`);
+        records.push(
+          {name: advertisement.Account_Name__r.Name,
+            AuctionTitle: advertisement.Opportunity__r.Auction_Title__c,
+            City: city,
+            State: state,
+            Month: month,
+            DayOfMonth: dayOfMonth,
+            DayOfWeek:dayOfWeek,
+            Time: `${hour}:${minute}`,
+            AMPM: ampm,
+            TimeZone: timezone,
+            image1: `./${advertisement.Id}/lot1.jpg`,
+            image2: `./${advertisement.Id}/lot2.jpg`,
+            image3: `./${advertisement.Id}/lot3.jpg`,
+            image4: `./${advertisement.Id}/lot4.jpg`,
+            logo: `./${advertisement.Id}/logo.jpg`,
+          }
+        )
+        // fs.appendFileSync(`InDesign.csv`, `\n"${advertisement.Account_Name__r.Name}", "${advertisement.Opportunity__r.Auction_Title__c}", "${city}", "${state}", "${month}", "${dayOfMonth}", "${dayOfWeek}", "${hour}:${minute}", "${ampm}", "${timezone}", ./${advertisement.Id}/lot1.jpg, ./${advertisement.Id}/lot2.jpg, ./${advertisement.Id}/lot3.jpg, ./${advertisement.Id}/lot4.jpg, ./${advertisement.Id}/logo.jpg`);
+
       })
-      return resolve(`Successfully build CSV`)
+      csvWriter.writeRecords(records).then(()=>{
+        console.log('...Done');
+        return resolve(`Successfully build CSV`)
+      });
     }catch(error){
       console.log(error);
       return reject(`Error building CSV: ${error}`);
     }
   })
+}
+
+function dayOfWeekSuffix(day){
+  switch (day) {
+  case 1: case 21: case 31: return "st";
+  case 2: case 22:          return "nd";
+  case 3: case 23:          return "rd";
+  }
+  return "th";
 }
 
 async function queryAuctionLocationAndStartTime(auctionId){
@@ -116,6 +171,8 @@ async function queryAuctionLocationAndStartTime(auctionId){
   const auctionState = auction.AbbreviationTx;
   const auctionTimeZone = auction.Abbreviation;
 
+  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayOfMonth = `${auction.AuctionDate.getUTCDate()}${dayOfWeekSuffix(auction.AuctionDate.getUTCDate())}`;
   return {
     location: {
       streetAddress: auctionStreetAddress,
@@ -123,8 +180,9 @@ async function queryAuctionLocationAndStartTime(auctionId){
       state: auctionState,
     },
     startTime: {
-      day: auction.AuctionDate.getUTCDate(),
-      month: auction.AuctionDate.getUTCMonth()+1, //0 index month
+      dayOfMonth: dayOfMonth,
+      dayOfWeek: daysOfWeek[auction.AuctionDate.getUTCDay()],
+      month: auction.AuctionDate.getMonthName(), //0 index month
       year: auction.AuctionDate.getUTCFullYear(),
       hour24: auction.AuctionTime.getUTCHours(),
       minute: auction.AuctionTime.getUTCMinutes().toString().padStart(2, '0'),
