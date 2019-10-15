@@ -1,16 +1,17 @@
-const {downloadImage} = require('./image-downloader')
-const {buildCsv} = require('./csv-builder')
-const {queryAuctionInformation} = require('./reporting-database-service')
-const {querySalesforce} = require('./salesforce-service')
-const advertisementBaseDirectory= `advertisements`;
+const { downloadImage } = require('./image-downloader')
+const { buildCsv } = require('./csv-builder')
+const { queryAuctionInformation } = require('./reporting-database-service')
+const { querySalesforce } = require('./salesforce-service')
+const advertisementBaseDirectory = `advertisements`;
 const dotenv = require('dotenv')
 dotenv.config();
 
-(async function makeItHappen(){
+(async function makeItHappen() {
   const advertisements = await querySalesforce();
+  gobblegobble();
   let succesfulAdvertisements = [];
   let failedAdvertisements = [];
-  for( const advertisement of advertisements){
+  for (const advertisement of advertisements) {
     const cleanedAuctionHouseName = advertisement.Account_Name__r.Name.replace(/'|,|"|\./g, '').replace(/\s|\//g, '-')
     advertisement.cleanedAuctionHouseName = cleanedAuctionHouseName;
     const directory = `${advertisementBaseDirectory}/${advertisement.cleanedAuctionHouseName}-${advertisement.Id}`;
@@ -23,7 +24,7 @@ dotenv.config();
       advertisement.isTimed = auctionInformation.isTimed;
       const logoUrl = `https://images.proxibid.com/auctionimages/${advertisement.Account_Name__r.Auction_House_Id__c}/${auctionInformation.auctionHouseLogoFileName}`;
 
-      await downloadImage(logoUrl, directory,"logo.jpg")
+      await downloadImage(logoUrl, directory, "logo.jpg")
       await downloadImage(advertisement.Lot_1_Web_Address__c, directory, "lot1.jpg")
       await downloadImage(advertisement.Lot_2_Web_Address__c, directory, "lot2.jpg");
       await downloadImage(advertisement.Lot_3_Web_Address__c, directory, "lot3.jpg");
@@ -37,5 +38,31 @@ dotenv.config();
   const buildCsvResult = await buildCsv(succesfulAdvertisements, advertisementBaseDirectory)
   console.log(buildCsvResult)
   console.log(`All dones`)
+  gobblegobble();
   console.log(`Failed Advertisements: ${JSON.stringify(failedAdvertisements)}`)
 })();
+
+function gobblegobble() {
+  console.log(`   ,---.                               _,---.     _,.---._                                        ,----.               `);
+  console.log(` .--.'  \\      _,..---._           _.='.'-,  \\  ,-.' , -  \`.    _..---.    _..---.    _.-.     ,-.--\` , \\  .-.,.---.   `);
+  console.log(` \\==\\-/\\ \\   /==/,   -  \\         /==.'-     / /==/_,  ,  - \\ .' .'.-. \\ .' .'.-. \\ .-,.'|    |==|-  _.-\` /==/  \`   \\  `);
+  console.log(` /==/-|_\\ |  |==|   _   _\\       /==/ -   .-' |==|   .=.     /==/- '=' //==/- '=' /|==|, |    |==|   \`.-.|==|-, .=., | `);
+  console.log(` \\==\\,   - \\ |==|  .=.   |       |==|_   /_,-.|==|_ : ;=:  - |==|-,   ' |==|-,   ' |==|- |   /==/_ ,    /|==|   '='  / `);
+  console.log(` /==/ -   ,| |==|,|   | -|       |==|  , \\_.' )==| , '='     |==|  .=. \\|==|  .=. \\|==|, |   |==|    .-' |==|- ,   .'  `);
+  console.log(`/==/-  /\\ - \\|==|  '='   /       \\==\\-  ,    ( \\==\\ -    ,_ //==/- '=' ,/==/- '=' ,|==|- \`-._|==|_  ,\`-._|==|_  . ,'.  `);
+  console.log(`\\==\\ _.\\=\\.-'|==|-,   _\`/         /==/ _  ,  /  '.='. -   .'|==|   -   /==|   -   //==/ - , ,/==/ ,     //==/  /\\ ,  ) `);
+  console.log(` \`--\`        \`-.\`.____.'          \`--\`------'     \`--\`--''  \`-._\`.___,'\`-._\`.___,' \`--\`-----'\`--\`-----\`\` \`--\`-\`--\`--'  `);
+  console.log(`                  .--.`);
+  console.log(`  {\\             / q {\\`);
+  console.log(`  { \`\\           \\ (-(~\``);
+  console.log(` { '.{\`\\          \\ \\ )`);
+  console.log(` {'-{ ' \\  .-""'-. \\ \\`);
+  console.log(` {._{'.' \\/       '.) \\`);
+  console.log(` {_.{.   {\`            |`);
+  console.log(` {._{ ' {   ;'-=-.     |`);
+  console.log(`  {-.{.' {  ';-=-.\`    /`);
+  console.log(`   {._.{.;    '-=-   .'`);
+  console.log(`    {_.-' \`'.__  _,-'`);
+  console.log(`             |||\``);
+  console.log(`            .='==,`);
+}
