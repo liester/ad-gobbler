@@ -7,8 +7,8 @@ const dotenv = require('dotenv')
 dotenv.config();
 const sql = require('mssql')
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
-
 const salesforceAdvertisementBaseUrl = process.env.salesforce_advertisement_base_url;
+const advertisementBaseDirectory= `advertisements`;
 
 const query = `SELECT Id, Advertising_Type__c, Type__c, Advertisement_Created__c,Marketing_to_use__c, Account_Manager__c,Auction_ID__c, Account_Name__c, Account_Name__r.Name, Account_Name__r.Auction_House_Id__c,Opportunity__r.Auction_Title__c, Opportunity__r.Estimated_Time_Of_Start__c,
 Lot_1__c, Lot_2__c,Lot_3__c,Lot_4__c,Lot_1_Web_Address__c, Lot_2_Web_Address__c, Lot_3_Web_Address__c, Lot_4_Web_Address__c, Start_Date__c 
@@ -48,7 +48,7 @@ function downloadImage(url, directory, fileName) {
     console.log(`Downloading image url for: ${fileName} - URL: ${url}`)
     http.get(url, function (response) {
       if(!fs.existsSync(directory)){
-        fs.mkdirSync(directory)
+        fs.mkdirSync(directory,{recursive: true})
       }
       const file = fs.createWriteStream(`${directory}/${fileName}`);
       response.pipe(file);
@@ -91,8 +91,10 @@ async function buildCsv(advertisements) {
       {id: 'State', title: 'State'},
       {id: 'Ends', title: 'Ends'},
       {id: 'Month', title: 'Month'},
+      {id: 'MonthAbbreviation', title: 'MonthAbbreviation'},
       {id: 'DayOfMonth', title: 'DayOfMonth'},
       {id: 'DayOfWeek', title: 'DayOfWeek'},
+      {id: 'DayOfWeekAbbreviation', title: 'DayOfWeekAbbreviation'},
       {id: 'Time', title: 'Time'},
       {id: 'AMPM', title: 'AMPM'},
       {id: 'TimeZone', title: 'TimeZone'},
@@ -111,7 +113,7 @@ async function buildCsv(advertisements) {
       }
       fs.writeFileSync(`InDesign.csv`, "ClientName, AuctionTitle, City, State, Month, DayOfMonth, DayOfWeek, Time, AMPM, TimeZone, @image1, @image2, @image3, @image4, @image-logo");
       advertisements.forEach((advertisement)=>{
-        let directory = `${advertisement.cleanedAuctionHouseName}-${advertisement.Id}`;
+        let directory = `${advertisementBaseDirectory}/${advertisement.cleanedAuctionHouseName}-${advertisement.Id}`;
         let month;
         let dayOfWeek;
         let dayOfMonth;
@@ -120,14 +122,18 @@ async function buildCsv(advertisements) {
         let minute;
         if(advertisement.isTimed){
           month= advertisement.auctionEndTime.month;
+          monthAbbreviation = advertisement.auctionEndTime.monthAbbreviation;
           dayOfWeek = advertisement.auctionEndTime.dayOfWeek;
+          dayOfWeekAbbreviation = advertisement.auctionEndTime.dayOfWeekAbbreviation;
           dayOfMonth = advertisement.auctionEndTime.dayOfMonth;
           hour = advertisement.auctionEndTime.hour24%12 == 0 ? 12:advertisement.auctionEndTime.hour24%12;
           ampm = advertisement.auctionEndTime.hour24 > 12? 'pm':'am';
           minute = advertisement.auctionEndTime.minute;
         }else {
           month= advertisement.auctionStartTime.month;
+          monthAbbreviation = advertisement.auctionStartTime.monthAbbreviation;
           dayOfWeek = advertisement.auctionStartTime.dayOfWeek;
+          dayOfWeekAbbreviation = advertisement.auctionStartTime.dayOfWeekAbbreviation;
           dayOfMonth = advertisement.auctionStartTime.dayOfMonth;
           hour = advertisement.auctionStartTime.hour24%12 == 0 ? 12:advertisement.auctionStartTime.hour24%12;
           ampm = advertisement.auctionStartTime.hour24 > 12? 'pm':'am';
@@ -137,7 +143,7 @@ async function buildCsv(advertisements) {
         const state = advertisement.auctionLocation.state;
         const timezone = advertisement.auctionStartTime.timezone;
         if (!fs.existsSync(directory)) {
-          fs.mkdirSync(directory);
+          fs.mkdirSync(directory, {recursive: true});
         }
         records.push(
           {
@@ -149,8 +155,10 @@ async function buildCsv(advertisements) {
             State: state,
             Ends: advertisement.isTimed?"Ends":"",
             Month: month,
+            MonthAbbreviation: monthAbbreviation,
             DayOfMonth: dayOfMonth,
             DayOfWeek:dayOfWeek,
+            DayOfWeekAbbreviation: dayOfWeekAbbreviation,
             Time: `${hour}:${minute}`,
             AMPM: ampm,
             TimeZone: timezone,
@@ -195,7 +203,9 @@ async function queryAuctionInformation(auctionId){
   auctionInformation.startTime = {
     dayOfMonth: auction.AuctionDate.getUTCDate(),
     dayOfWeek: daysOfWeek[auction.AuctionDate.getUTCDay()],
+    dayOfWeekAbbreviation: daysOfWeek[auction.AuctionDate.getUTCDay()].substring(0,3),
     month: auction.AuctionDate.getMonthName(),
+    monthAbbreviation: auction.AuctionDate.getMonthAbbr(),
     year: auction.AuctionDate.getUTCFullYear(),
     hour24: auction.AuctionTime.getUTCHours(),
     minute: auction.AuctionTime.getUTCMinutes().toString().padStart(2, '0'),
@@ -206,7 +216,9 @@ async function queryAuctionInformation(auctionId){
     auctionInformation.endTime = {
       dayOfMonth: auction.EndDateTime.getUTCDate(),
       dayOfWeek: daysOfWeek[auction.EndDateTime.getUTCDay()],
+      dayOfWeekAbbreviation: daysOfWeek[auction.EndDateTime.getUTCDay()].substring(0,3),
       month: auction.EndDateTime.getMonthName(), 
+      monthAbbreviation: auction.EndDateTime.getMonthAbbr(),
       year: auction.EndDateTime.getUTCFullYear(),
       hour24: auction.EndDateTime.getUTCHours(),
       minute: auction.EndDateTime.getUTCMinutes().toString().padStart(2, '0'),
@@ -270,7 +282,7 @@ function isJpegURL(url){
   for( const advertisement of advertisements){
     const cleanedAuctionHouseName = advertisement.Account_Name__r.Name.replace(/'|,|"|\./g, '').replace(/\s|\//g, '-')
     advertisement.cleanedAuctionHouseName = cleanedAuctionHouseName;
-    const directory = `${advertisement.cleanedAuctionHouseName}-${advertisement.Id}`;
+    const directory = `${advertisementBaseDirectory}/${advertisement.cleanedAuctionHouseName}-${advertisement.Id}`;
     try {
       console.log(JSON.stringify(advertisement));
       await downloadLogo(advertisement.Account_Name__r.Auction_House_Id__c,  directory,"logo.jpg")
