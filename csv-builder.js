@@ -14,7 +14,6 @@ async function buildCsv(advertisements, advertisementBaseDirectory) {
         {id: 'AuctionTitle', title: 'AuctionTitle'},
         {id: 'City', title: 'City'},
         {id: 'State', title: 'State'},
-        {id: 'Ends', title: 'Ends'},
         {id: 'Month', title: 'Month'},
         {id: 'MonthAbbreviation', title: 'MonthAbbreviation'},
         {id: 'DayOfMonth', title: 'DayOfMonth'},
@@ -56,8 +55,8 @@ async function buildCsv(advertisements, advertisementBaseDirectory) {
           }else {
             month= advertisement.auctionStartTime.month;
             monthAbbreviation = advertisement.auctionStartTime.monthAbbreviation;
-            dayOfWeek = advertisement.auctionStartTime.dayOfWeek;
-            dayOfWeekAbbreviation = advertisement.auctionStartTime.dayOfWeekAbbreviation;
+            dayOfWeek = `Ends ${advertisement.auctionStartTime.dayOfWeek}`;
+            dayOfWeekAbbreviation = `Ends ${advertisement.auctionStartTime.dayOfWeekAbbreviation}`;
             dayOfMonth = advertisement.auctionStartTime.dayOfMonth;
             hour = advertisement.auctionStartTime.hour24%12 == 0 ? 12:advertisement.auctionStartTime.hour24%12;
             ampm = advertisement.auctionStartTime.hour24 > 12? 'pm':'am';
@@ -77,7 +76,6 @@ async function buildCsv(advertisements, advertisementBaseDirectory) {
               AuctionTitle: advertisement.Opportunity__r.Auction_Title__c,
               City: city,
               State: state,
-              Ends: advertisement.isTimed?"Ends ":"",
               Month: month,
               MonthAbbreviation: monthAbbreviation,
               DayOfMonth: dayOfMonth,
