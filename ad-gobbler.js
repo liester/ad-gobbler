@@ -4,10 +4,11 @@ const fs = require('fs');
 const cheerio = require('cheerio')
 const axios = require('axios')
 const dotenv = require('dotenv')
+dotenv.config();
 const sql = require('mssql')
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 
-dotenv.config();
+const salesforceAdvertisementBaseUrl = process.env.salesforce_advertisement_base_url;
 
 const query = `SELECT Id, Advertising_Type__c, Type__c, Advertisement_Created__c,Marketing_to_use__c, Account_Manager__c,Auction_ID__c, Account_Name__c, Account_Name__r.Name, Account_Name__r.Auction_House_Id__c,Opportunity__r.Auction_Title__c, Opportunity__r.Estimated_Time_Of_Start__c,
 Lot_1__c, Lot_2__c,Lot_3__c,Lot_4__c,Lot_1_Web_Address__c, Lot_2_Web_Address__c, Lot_3_Web_Address__c, Lot_4_Web_Address__c, Start_Date__c 
@@ -82,6 +83,7 @@ async function buildCsv(advertisements) {
   const csvWriter = createCsvWriter({
     path: 'InDesign.csv',
     header: [
+      {id: 'salesforceAdvertisementUrl', title: 'SalesforceAdvertisementURL'},
       {id: 'marketingToUse', title: 'marketingToUse' },
       {id: 'name', title: 'ClientName'},
       {id: 'AuctionTitle', title: 'AuctionTitle'},
@@ -109,13 +111,28 @@ async function buildCsv(advertisements) {
       }
       fs.writeFileSync(`InDesign.csv`, "ClientName, AuctionTitle, City, State, Month, DayOfMonth, DayOfWeek, Time, AMPM, TimeZone, @image1, @image2, @image3, @image4, @image-logo");
       advertisements.forEach((advertisement)=>{
-        const directory = `${advertisement.cleanedAuctionHouseName}-${advertisement.Id}`;
-        const month= advertisement.auctionStartTime.month;
-        const dayOfWeek = advertisement.auctionStartTime.dayOfWeek;
-        const dayOfMonth = advertisement.auctionStartTime.dayOfMonth;
-        const hour = advertisement.auctionStartTime.hour24%12 == 0 ? 12:advertisement.auctionStartTime.hour24%12;
-        const ampm = advertisement.auctionStartTime.hour24 > 12? 'pm':'am';
-        const minute = advertisement.auctionStartTime.minute;
+        let directory = `${advertisement.cleanedAuctionHouseName}-${advertisement.Id}`;
+        let month;
+        let dayOfWeek;
+        let dayOfMonth;
+        let hour;
+        let ampm;
+        let minute;
+        if(advertisement.isTimed){
+          month= advertisement.auctionEndTime.month;
+          dayOfWeek = advertisement.auctionEndTime.dayOfWeek;
+          dayOfMonth = advertisement.auctionEndTime.dayOfMonth;
+          hour = advertisement.auctionEndTime.hour24%12 == 0 ? 12:advertisement.auctionEndTime.hour24%12;
+          ampm = advertisement.auctionEndTime.hour24 > 12? 'pm':'am';
+          minute = advertisement.auctionEndTime.minute;
+        }else {
+          month= advertisement.auctionStartTime.month;
+          dayOfWeek = advertisement.auctionStartTime.dayOfWeek;
+          dayOfMonth = advertisement.auctionStartTime.dayOfMonth;
+          hour = advertisement.auctionStartTime.hour24%12 == 0 ? 12:advertisement.auctionStartTime.hour24%12;
+          ampm = advertisement.auctionStartTime.hour24 > 12? 'pm':'am';
+          minute = advertisement.auctionStartTime.minute;
+        }
         const city = advertisement.auctionLocation.city;
         const state = advertisement.auctionLocation.state;
         const timezone = advertisement.auctionStartTime.timezone;
@@ -124,6 +141,7 @@ async function buildCsv(advertisements) {
         }
         records.push(
           {
+            salesforceAdvertisementUrl: `${salesforceAdvertisementBaseUrl}/${advertisement.Id}`,
             marketingToUse: advertisement.Marketing_to_use__c,
             name: advertisement.Account_Name__r.Name,
             AuctionTitle: advertisement.Opportunity__r.Auction_Title__c,
@@ -155,15 +173,6 @@ async function buildCsv(advertisements) {
   })
 }
 
-function dayOfWeekSuffix(day){
-  switch (day) {
-  case 1: case 21: case 31: return "st";
-  case 2: case 22:          return "nd";
-  case 3: case 23:          return "rd";
-  }
-  return "th";
-}
-
 async function queryAuctionInformation(auctionId){
   const result = await sql.query`select * from proxibid_reporting.dbo.Auctions 
   join proxibid_reporting.dbo.TimeZoneLU on Auctions.TimeZoneID = TimeZoneLU.TimeZoneID 
@@ -177,24 +186,34 @@ async function queryAuctionInformation(auctionId){
   const isTimed = auction.AuctionTypeId == 2;
 
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const dayOfMonth = `${auction.AuctionDate.getUTCDate()}${dayOfWeekSuffix(auction.AuctionDate.getUTCDate())}`;
-  return {
-    location: {
-      streetAddress: auctionStreetAddress,
-      city: auctionCity,
-      state: auctionState,
-    },
-    startTime: {
-      dayOfMonth: dayOfMonth,
-      dayOfWeek: daysOfWeek[auction.AuctionDate.getUTCDay()],
-      month: auction.AuctionDate.getMonthName(), //0 index month
-      year: auction.AuctionDate.getUTCFullYear(),
-      hour24: auction.AuctionTime.getUTCHours(),
-      minute: auction.AuctionTime.getUTCMinutes().toString().padStart(2, '0'),
-      timezone: auctionTimeZone
-    },
-    isTimed: isTimed
+  let auctionInformation = {};
+  auctionInformation.location = {
+    streetAddress: auctionStreetAddress,
+    city: auctionCity,
+    state: auctionState,
+  };
+  auctionInformation.startTime = {
+    dayOfMonth: auction.AuctionDate.getUTCDate(),
+    dayOfWeek: daysOfWeek[auction.AuctionDate.getUTCDay()],
+    month: auction.AuctionDate.getMonthName(),
+    year: auction.AuctionDate.getUTCFullYear(),
+    hour24: auction.AuctionTime.getUTCHours(),
+    minute: auction.AuctionTime.getUTCMinutes().toString().padStart(2, '0'),
+    timezone: auctionTimeZone
   }
+  auctionInformation.isTimed = isTimed;
+  if(isTimed){
+    auctionInformation.endTime = {
+      dayOfMonth: auction.EndDateTime.getUTCDate(),
+      dayOfWeek: daysOfWeek[auction.EndDateTime.getUTCDay()],
+      month: auction.EndDateTime.getMonthName(), 
+      year: auction.EndDateTime.getUTCFullYear(),
+      hour24: auction.EndDateTime.getUTCHours(),
+      minute: auction.EndDateTime.getUTCMinutes().toString().padStart(2, '0'),
+      timezone: auctionTimeZone
+    }
+  }
+  return auctionInformation;
 }
 
 async function connectToReportingDatabase(){
@@ -283,11 +302,12 @@ function isJpegURL(url){
       const auctionInformation = await queryAuctionInformation(advertisement.Auction_ID__c)
       advertisement.auctionLocation = auctionInformation.location;
       advertisement.auctionStartTime = auctionInformation.startTime;
+      advertisement.auctionEndTime = auctionInformation.endTime;
       advertisement.isTimed = auctionInformation.isTimed;
       succesfulAdvertisements.push(advertisement);
     } catch (error) {
       console.log(error)
-      failedAdvertisements.push(`${advertisement.Id}: ${error}`);
+      failedAdvertisements.push(`${salesforce_advertisement_base_url}/${advertisement.Id}: ${error}`);
     }
   }
   const buildCsvResult = await buildCsv(succesfulAdvertisements)
