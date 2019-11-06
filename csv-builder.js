@@ -46,8 +46,8 @@ async function buildCsv(advertisements, advertisementBaseDirectory) {
           if(advertisement.isTimed){
             month= advertisement.auctionEndTime.month;
             monthAbbreviation = advertisement.auctionEndTime.monthAbbreviation;
-            dayOfWeek = advertisement.auctionEndTime.dayOfWeek;
-            dayOfWeekAbbreviation = advertisement.auctionEndTime.dayOfWeekAbbreviation;
+            dayOfWeek = `Ends ${advertisement.auctionEndTime.dayOfWeek}`;
+            dayOfWeekAbbreviation = `Ends ${advertisement.auctionEndTime.dayOfWeekAbbreviation}`;
             dayOfMonth = advertisement.auctionEndTime.dayOfMonth;
             hour = advertisement.auctionEndTime.hour24%12 == 0 ? 12:advertisement.auctionEndTime.hour24%12;
             ampm = advertisement.auctionEndTime.hour24 > 12? 'pm':'am';
@@ -55,8 +55,8 @@ async function buildCsv(advertisements, advertisementBaseDirectory) {
           }else {
             month= advertisement.auctionStartTime.month;
             monthAbbreviation = advertisement.auctionStartTime.monthAbbreviation;
-            dayOfWeek = `Ends ${advertisement.auctionStartTime.dayOfWeek}`;
-            dayOfWeekAbbreviation = `Ends ${advertisement.auctionStartTime.dayOfWeekAbbreviation}`;
+            dayOfWeek = advertisement.auctionStartTime.dayOfWeek;
+            dayOfWeekAbbreviation = advertisement.auctionStartTime.dayOfWeekAbbreviation;
             dayOfMonth = advertisement.auctionStartTime.dayOfMonth;
             hour = advertisement.auctionStartTime.hour24%12 == 0 ? 12:advertisement.auctionStartTime.hour24%12;
             ampm = advertisement.auctionStartTime.hour24 > 12? 'pm':'am';
